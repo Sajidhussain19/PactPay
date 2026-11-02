@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.contracts import router as contracts_router
 from app.api.health import router as health_router
 from app.api.webhooks import router as webhooks_router
 from app.core.config import get_settings
+from app.core.llm import build_llm
 from app.core.logging import configure_logging
 from app.paypal.client import PayPalClient
 from app.paypal.webhooks import (
@@ -25,6 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     paypal = PayPalClient.from_settings(settings)
     app.state.paypal = paypal
+    app.state.llm = build_llm(settings)
     app.state.webhook_processor = WebhookProcessor(
         WebhookVerifier(paypal, settings.paypal_webhook_id),
         InMemoryEventStore(),
@@ -56,6 +59,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health_router)
     app.include_router(webhooks_router)
+    app.include_router(contracts_router)
     return app
 
 
