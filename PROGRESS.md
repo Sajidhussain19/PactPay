@@ -1,9 +1,16 @@
 # PactPay progress
 
 ## 2026-11-02: M1 Foundations
-- Built: repo layout, FastAPI app with `/health`, pydantic-settings config, `.env.example`,
-  Dockerfile, docker-compose (Postgres), GitHub Actions (ruff + pytest), MIT license,
-  `docs/architecture.md` (system diagram, state machine, PayPal money flow, day plan).
-- Works: `pytest` and `ruff` pass locally.
+- Built: repo layout, FastAPI `/health`, pydantic-settings config, Dockerfile, docker-compose
+  (Postgres), GitHub Actions (ruff + pytest), MIT license, `docs/architecture.md`.
 - Decision: added `NEEDS_REVIEW` state for low-confidence verdicts.
-- Next: M2 PayPal client, orders, payouts, webhooks.
+
+## 2026-11-02: M2 PayPal layer
+- Built: `app/paypal/client.py` (cached OAuth, 401 refresh, retries with backoff on 5xx/429/network,
+  stable PayPal-Request-Id, debug-id logging), `orders.py` (AUTHORIZE order, authorize, capture,
+  void, reauthorize), `payouts.py` (fee split, idempotent payouts, status), `webhooks.py` +
+  `POST /webhooks/paypal` (signature verification, dedupe, dispatch), `scripts/sandbox_flow.py`,
+  `docs/paypal-setup.md`.
+- Works: 37 mocked tests pass; ruff clean. Sandbox run pending real credentials.
+- Decisions: request IDs derived from milestone IDs (retry-safe); webhook dedupe is in-memory until M6.
+- Next: run sandbox flow with real creds; M3 contract agent.

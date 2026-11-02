@@ -1,9 +1,40 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
+from app.api.webhooks import router as webhooks_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.paypal.client import PayPalClient
+from app.paypal.webhooks import (
+    DEFAULT_HANDLERS,
+    InMemoryEventStore,
+    WebhookProcessor,
+    WebhookVerifier,
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    if settings.paypal_webhook_skip_verify and settings.app_env == "production":
+        raise RuntimeError("PAYPAL_WEBHOOK_SKIP_VERIFY must never be enabled in production")
+
+    paypal = PayPalClient.from_settings(settings)
+    app.state.paypal = paypal
+    app.state.webhook_processor = WebhookProcessor(
+        WebhookVerifier(paypal, settings.paypal_webhook_id),
+        InMemoryEventStore(),
+        DEFAULT_HANDLERS,
+        skip_verification=settings.paypal_webhook_skip_verify,
+    )
+    try:
+        yield
+    finally:
+        await paypal.aclose()
 
 
 def create_app() -> FastAPI:
@@ -14,6 +45,7 @@ def create_app() -> FastAPI:
         title="PactPay API",
         description="AI-verified escrow for freelance work, powered by PayPal.",
         version="0.1.0",
+        lifespan=lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -23,6 +55,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(health_router)
+    app.include_router(webhooks_router)
     return app
 
 

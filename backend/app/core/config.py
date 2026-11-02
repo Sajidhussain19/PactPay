@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     paypal_client_id: str = ""
     paypal_client_secret: SecretStr = SecretStr("")
     paypal_webhook_id: str = ""
+    # Webhook simulator events can't pass signature verification. Dev only; refused in production.
+    paypal_webhook_skip_verify: bool = False
     paypal_currency: str = "USD"
     platform_fee_percent: Decimal = Decimal("5.0")
 
