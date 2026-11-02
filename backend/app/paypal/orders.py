@@ -41,6 +41,15 @@ class AuthorizedOrder(BaseModel):
     authorization: Authorization
 
 
+class SandboxCard(BaseModel):
+    """PayPal sandbox test card (Visa). Only valid against api-m.sandbox.paypal.com."""
+
+    number: str = "4111111111111111"
+    expiry: str = "2030-12"
+    security_code: str = "123"
+    name: str = "PactPay Test Client"
+
+
 class Capture(BaseModel):
     id: str
     status: str  # COMPLETED, PENDING, DECLINED, ...
@@ -102,15 +111,41 @@ class OrdersService:
             json={},
             request_id=request_id or f"authorize-{order_id}",
         )
-        try:
-            raw_auth = data["purchase_units"][0]["payments"]["authorizations"][0]
-        except (KeyError, IndexError) as exc:
-            raise PayPalError(
-                f"Authorize response for order {order_id} had no authorization"
-            ) from exc
-        return AuthorizedOrder(
-            order_id=data["id"], order_status=data["status"], authorization=_authorization(raw_auth)
+        return _authorized_order(data)
+
+    async def create_sandbox_card_authorization(
+        self,
+        *,
+        amount: Decimal | str,
+        currency: str,
+        reference_id: str,
+        description: str,
+        request_id: str,
+        card: SandboxCard | None = None,
+    ) -> AuthorizedOrder:
+        """Create an AUTHORIZE order funded by a sandbox test card: authorized in one call,
+        no buyer approval step. For scripts, evals and the judge demo only.
+
+        Never send real card numbers through PactPay; in production buyers enter cards in
+        PayPal-hosted UI so card data never touches our servers (PCI scope).
+        """
+        card = card or SandboxCard()
+        body = {
+            "intent": "AUTHORIZE",
+            "purchase_units": [
+                {
+                    "reference_id": reference_id,
+                    "custom_id": reference_id,
+                    "description": description[:127],
+                    "amount": {"currency_code": currency, "value": to_paypal_value(amount)},
+                }
+            ],
+            "payment_source": {"card": card.model_dump()},
+        }
+        data = await self._client.request(
+            "POST", "/v2/checkout/orders", json=body, request_id=request_id
         )
+        return _authorized_order(data)
 
     async def get_authorization(self, authorization_id: str) -> Authorization:
         data = await self._client.request("GET", f"/v2/payments/authorizations/{authorization_id}")
@@ -178,6 +213,16 @@ def _approve_url(order: dict[str, Any]) -> str:
         if link.get("rel") in {"payer-action", "approve"}:
             return link["href"]
     raise PayPalError(f"Order {order.get('id')} has no approval link")
+
+
+def _authorized_order(order: dict[str, Any]) -> AuthorizedOrder:
+    try:
+        raw_auth = order["purchase_units"][0]["payments"]["authorizations"][0]
+    except (KeyError, IndexError) as exc:
+        raise PayPalError(f"Order {order.get('id')} has no authorization") from exc
+    return AuthorizedOrder(
+        order_id=order["id"], order_status=order["status"], authorization=_authorization(raw_auth)
+    )
 
 
 def _money(raw: dict[str, Any] | None) -> Money | None:

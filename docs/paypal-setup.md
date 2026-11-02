@@ -29,6 +29,9 @@ python -m scripts.sandbox_flow --amount 150 --freelancer-email <freelancer sandb
 python -m scripts.sandbox_flow --amount 150 --void
 ```
 Log into https://www.sandbox.paypal.com as the freelancer to see the payout arrive.
+Add `--card` to skip the browser approval (funds with a sandbox test card).
+
+**Use US sandbox accounts.** An India (IN) business account fails payouts with `PAYOUT_NOT_AVAILABLE`.
 
 ## 4. Webhooks (local)
 1. Start the API: `uvicorn app.main:app --reload`

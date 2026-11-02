@@ -14,4 +14,7 @@
 - Works: 37 mocked tests pass; ruff clean. Sandbox run pending real credentials.
 - Decisions: request IDs derived from milestone IDs (retry-safe); webhook dedupe is in-memory until M6.
 - Switched LLM provider to OpenAI (gpt-4o, configurable via LLM_MODEL); PayPal sandbox OAuth and OpenAI key verified.
-- Next: run sandbox flow with real creds; M3 contract agent.
+- Sandbox verified end to end (2026-11-02): $150 card-funded authorization -> capture COMPLETED -> payout $142.50 SUCCESS; void path VOIDED.
+- Gotcha: India (IN) sandbox business accounts cannot send payouts (PAYOUT_NOT_AVAILABLE). Platform app now uses a US business sandbox account.
+- Added `--card` mode (sandbox test card, no browser approval) for scripts, evals and judge demo.
+- Next: M3 contract agent (OpenAI gpt-4o).
