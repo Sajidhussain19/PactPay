@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets & local data
+.env
+*.db
+*.sqlite3
+
+# Verification artifacts
+backend/artifacts/
+backend/evals/out/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
