@@ -13,4 +13,5 @@
   `docs/paypal-setup.md`.
 - Works: 37 mocked tests pass; ruff clean. Sandbox run pending real credentials.
 - Decisions: request IDs derived from milestone IDs (retry-safe); webhook dedupe is in-memory until M6.
+- Switched LLM provider to OpenAI (gpt-4o, configurable via LLM_MODEL); PayPal sandbox OAuth and OpenAI key verified.
 - Next: run sandbox flow with real creds; M3 contract agent.

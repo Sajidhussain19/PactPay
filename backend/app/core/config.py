@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     platform_fee_percent: Decimal = Decimal("5.0")
 
     # AI
-    anthropic_api_key: SecretStr = SecretStr("")
-    llm_model: str = "claude-sonnet-5-5"
+    openai_api_key: SecretStr = SecretStr("")
+    llm_model: str = "gpt-4o"  # must support vision + structured outputs
     judge_confidence_threshold: float = 0.8
 
     @property
