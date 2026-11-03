@@ -21,7 +21,7 @@ class Submission(BaseModel):
 
 
 class Verdict(StrEnum):
-    PASS = "pass"  # noqa: S105 - not a password
+    PASS = "pass"
     FAIL = "fail"
     NEEDS_REVIEW = "needs_review"  # automated verdict is uncertain; a human decides
     MANUAL = "manual"  # subjective criterion; client confirms when approving release

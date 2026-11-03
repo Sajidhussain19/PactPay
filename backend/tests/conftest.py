@@ -14,6 +14,7 @@ import respx
 from fastapi.testclient import TestClient
 
 os.environ["APP_ENV"] = "test"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 # Environment variables beat backend/.env, so tests never use real keys or spend credits.
 for _secret in ("PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID", "OPENAI_API_KEY"):
     os.environ[_secret] = ""

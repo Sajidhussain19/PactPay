@@ -72,29 +72,42 @@ Key boundaries:
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT
-    DRAFT --> AGREED: both parties approve criteria
-    AGREED --> FUNDED: client approves PayPal order, we authorize
-    FUNDED --> SUBMITTED: freelancer submits repo + live URL
+    DRAFT --> AGREED: both parties approve
+    DRAFT --> CANCELLED: cancel
+    AGREED --> FUNDED: PayPal authorization holds funds
+    AGREED --> CANCELLED: cancel (nothing held)
+    FUNDED --> SUBMITTED: freelancer submits
+    FUNDED --> REFUNDED: client cancels (void)
     SUBMITTED --> VERIFYING: verification starts
-    VERIFYING --> PASSED: all criteria pass
+    VERIFYING --> PASSED: all automated criteria pass
     VERIFYING --> FAILED: any criterion fails
-    VERIFYING --> NEEDS_REVIEW: low confidence or manual criteria
-    NEEDS_REVIEW --> PASSED: human approves
-    NEEDS_REVIEW --> FAILED: human rejects
-    FAILED --> SUBMITTED: freelancer resubmits
-    PASSED --> RELEASED: client approves (or timeout) → capture + payout
-    PASSED --> DISPUTED: client disagrees
-    FAILED --> DISPUTED: freelancer disagrees
-    DISPUTED --> RELEASED: resolved for freelancer
-    DISPUTED --> REFUNDED: resolved for client (void)
-    FUNDED --> REFUNDED: cancel before submission (void)
+    VERIFYING --> NEEDS_REVIEW: low confidence / check couldn't run
+    VERIFYING --> SUBMITTED: verifier error (retry)
+    NEEDS_REVIEW --> PASSED: reviewer approves
+    NEEDS_REVIEW --> FAILED: reviewer rejects
+    FAILED --> SUBMITTED: freelancer fixes and resubmits
     FAILED --> REFUNDED: client cancels (void)
+    PASSED --> RELEASING: client approves (or auto-approve timeout)
+    RELEASING --> RELEASED: captured + payout succeeded
+    PASSED --> DISPUTED
+    FAILED --> DISPUTED
+    NEEDS_REVIEW --> DISPUTED
+    DISPUTED --> RELEASING: admin resolves for freelancer
+    DISPUTED --> REFUNDED: admin resolves for client (void)
     RELEASED --> [*]
     REFUNDED --> [*]
+    CANCELLED --> [*]
 ```
 
-`NEEDS_REVIEW` is added to the pack's state list so low-confidence verdicts have an explicit home
-instead of being forced into PASSED/FAILED.
+Additions to the pack's state list:
+- `NEEDS_REVIEW`: low-confidence verdicts get an explicit home instead of being forced into PASSED/FAILED.
+- `RELEASING`: capture and payout are two PayPal calls. If capture succeeds and payout fails (we hit
+  this in sandbox with a country restriction), the milestone stays here and the payout is retried
+  idempotently instead of pretending the money arrived.
+- `CANCELLED`: cancelled before any money was held (distinct from `REFUNDED`, which voids a hold).
+
+Every transition is defined in `backend/app/workflows/milestone_state.py` with the roles allowed to
+trigger it and a guard (e.g. no release without a PayPal authorization; no refund after capture).
 
 ## Money flow (PayPal)
 

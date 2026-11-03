@@ -9,7 +9,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC", "S"]
-ignore = ["S101"]  # assert is fine in tests
+ignore = [
+    "S101",  # assert is fine in tests
+    "S105",  # flags enum values like "pass"; secrets come from .env, never source
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

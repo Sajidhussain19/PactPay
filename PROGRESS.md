@@ -61,3 +61,20 @@
 - Known: judge confidence clusters at 0.95 (calibration to measure in M9). Injection attempts
   are defeated but not yet *flagged* in the report (M8 detector).
 - Next: M6 persistence + state machine.
+
+## 2026-11-03: M6 Persistence + state machine
+- Built: `workflows/milestone_state.py` (pure state machine: 17 actions, roles, guards,
+  `allowed_actions` for UI buttons), `models/db.py` (User, Contract, Milestone, Criterion,
+  Submission, VerificationRun, CheckResult, PaymentEvent, WebhookEvent, AuditEvent),
+  `core/db.py`, `services/milestones.py` (the only way state changes: guard -> mutate -> audit,
+  optimistic locking), `services/contracts.py`, `services/records.py` (reports, idempotent
+  payment events, DB webhook dedupe), Alembic `migrations/` (initial schema).
+- Works: 407 tests (288 generated state-machine cases: every legal and illegal transition,
+  every forbidden role, every money guard). Migrations round-trip on SQLite and Postgres 16;
+  persistence tests pass on both. Webhook dedupe now survives restarts.
+- Decisions: added RELEASING (capture ok / payout pending is retryable) and CANCELLED.
+  `apply` decides before mutating, so illegal actions change nothing. `get()` always reads
+  fresh rows. Disabled ruff S105 (false positives on "pass" enums).
+- Gotcha: async SQLAlchemy can't lazy-load expired attributes (MissingGreenlet); capture ids
+  before commit/rollback, eager-load relationships.
+- Next: M7 REST API + SSE + release executor.

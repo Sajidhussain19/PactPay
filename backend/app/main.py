@@ -8,15 +8,13 @@ from app.api.contracts import router as contracts_router
 from app.api.health import router as health_router
 from app.api.webhooks import router as webhooks_router
 from app.core.config import get_settings
+from app.core.db import create_engine, create_session_factory
 from app.core.llm import build_llm
 from app.core.logging import configure_logging
+from app.models.db import Base
 from app.paypal.client import PayPalClient
-from app.paypal.webhooks import (
-    DEFAULT_HANDLERS,
-    InMemoryEventStore,
-    WebhookProcessor,
-    WebhookVerifier,
-)
+from app.paypal.webhooks import DEFAULT_HANDLERS, WebhookProcessor, WebhookVerifier
+from app.services.records import SqlEventStore
 
 
 @asynccontextmanager
@@ -25,12 +23,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.paypal_webhook_skip_verify and settings.app_env == "production":
         raise RuntimeError("PAYPAL_WEBHOOK_SKIP_VERIFY must never be enabled in production")
 
+    engine = create_engine(settings.database_url)
+    if settings.database_auto_create:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    app.state.session_factory = create_session_factory(engine)
+
     paypal = PayPalClient.from_settings(settings)
     app.state.paypal = paypal
     app.state.llm = build_llm(settings)
     app.state.webhook_processor = WebhookProcessor(
         WebhookVerifier(paypal, settings.paypal_webhook_id),
-        InMemoryEventStore(),
+        SqlEventStore(app.state.session_factory),
         DEFAULT_HANDLERS,
         skip_verification=settings.paypal_webhook_skip_verify,
     )
@@ -38,6 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await paypal.aclose()
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:

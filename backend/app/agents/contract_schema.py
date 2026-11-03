@@ -21,7 +21,7 @@ class CheckType(StrEnum):
     PERFORMANCE = "performance"
     VISUAL_MATCH = "visual_match"
     REPO_CHECK = "repo_check"
-    TESTS_PASS = "tests_pass"  # noqa: S105 - not a password
+    TESTS_PASS = "tests_pass"
     MANUAL = "manual"
 
 

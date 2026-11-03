@@ -31,6 +31,8 @@ class Settings(BaseSettings):
 
     # Database (SQLite to start, Postgres in docker-compose / Render)
     database_url: str = "sqlite+aiosqlite:///./pactpay.db"
+    # Create tables on startup (local dev). Production runs `alembic upgrade head` instead.
+    database_auto_create: bool = True
 
     # PayPal
     paypal_mode: Literal["sandbox", "live"] = "sandbox"
