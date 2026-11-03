@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; color: #3b2f2a; background: #fffaf3; }
+.hero { padding: 64px 24px; text-align: center; background: #f4e1c6; }
+.hero h1 { margin: 0 0 8px; font-size: clamp(2rem, 6vw, 3.5rem); }
+.button { display: inline-block; margin-top: 16px; padding: 12px 24px; border-radius: 8px;
+  background: #8b4513; color: #fff; text-decoration: none; }
+main { max-width: 960px; margin: 0 auto; padding: 24px; display: grid; gap: 32px; }
+@media (min-width: 768px) { main { grid-template-columns: 1fr 1fr; } }
+.menu-list { list-style: none; padding: 0; }
+.menu-list li { display: flex; justify-content: space-between; padding: 8px 0;
+  border-bottom: 1px dashed #d9c3a5; }
+form { display: grid; gap: 12px; }
+label { display: grid; gap: 4px; }
+input, textarea { width: 100%; padding: 10px; border: 1px solid #c9b18f; border-radius: 6px; font: inherit; }
+button { padding: 12px; border: 0; border-radius: 8px; background: #8b4513; color: #fff; font: inherit; cursor: pointer; }
+.success { padding: 12px; border-radius: 8px; background: #e3f4e1; color: #24532a; }
+.error { color: #a12a2a; }
+footer { padding: 24px; text-align: center; font-size: 0.9rem; }

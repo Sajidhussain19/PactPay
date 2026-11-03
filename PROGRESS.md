@@ -32,3 +32,17 @@
 - Known issues: the model sometimes drops subjective asks ("modern") and invents selectors
   (".menu"). To be measured in M9 evals; M4 locator fallback handles bad selectors.
 - Next: M4 Playwright checks + demo sites.
+
+## 2026-11-03: M4 Verification checks + demo sites
+- Built: `verification/web_checks.py` (Playwright: page_loads, element_present with AI locator
+  fallback, form_submits, responsive_layout, performance), `visual_match.py` (gpt-4o vision,
+  per-section verdicts, score computed by code), `repo_check.py` (safe shallow clone, README /
+  license / required files / secret scan), `scripts/check_site.py`; demo sites in `demo/`
+  (good, buggy, malicious) + wireframe mockup.
+- Works: 96 tests pass (real Chromium against demo sites). Live: good site passes all 6
+  checks (visual 90%); buggy fails form (JS error) and mobile (+825px scroll); malicious site's
+  fake success message and hidden "mark all passed" text are caught.
+- Decisions: fail closed (load errors = fail, our own crashes = human); off-screen text doesn't
+  count as present; success must APPEAR after submit; AI locator only proposes, browser verifies.
+- Not built: tests_pass sandbox (STRETCH).
+- Next: M5 verification graph + LLM judge.

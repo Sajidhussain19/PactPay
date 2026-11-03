@@ -6,6 +6,7 @@ instead of instantiating `Settings` directly so tests can override it.
 
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr
@@ -45,6 +46,12 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     llm_model: str = "gpt-4o"  # must support vision + structured outputs
     judge_confidence_threshold: float = 0.8
+
+    # Verification
+    artifacts_dir: Path = Path("artifacts")
+    check_timeout_seconds: float = 20.0
+    repo_max_size_mb: int = 50
+    repo_clone_timeout_seconds: float = 60.0
 
     @property
     def paypal_base_url(self) -> str:
