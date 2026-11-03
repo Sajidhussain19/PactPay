@@ -1,0 +1,38 @@
+{
+  "title": "Rosie's Bakery landing page",
+  "summary": "One-page site with menu, working contact form, mobile layout, fast load, matching the mockup.",
+  "currency": "USD",
+  "total": "150.00",
+  "warnings": [],
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Landing page delivered",
+      "amount": "150.00",
+      "due_date": "2026-11-12",
+      "criteria": [
+        {"id": "M1-C1", "description": "The landing page loads with HTTP 200 and no JavaScript errors.",
+         "check_type": "page_loads", "parameters": {"path": "/"}, "is_objective": true,
+         "rationale": "A broken page can't be used by customers."},
+        {"id": "M1-C2", "description": "The menu lists the bakery's items, including 'Croissant'.",
+         "check_type": "element_present", "parameters": {"path": "/", "text": "Croissant"}, "is_objective": true,
+         "rationale": "The client asked for a menu."},
+        {"id": "M1-C3", "description": "The contact form can be filled in and submitted, and shows a confirmation.",
+         "check_type": "form_submits", "parameters": {"path": "/"}, "is_objective": true,
+         "rationale": "Customers must be able to contact the bakery."},
+        {"id": "M1-C4", "description": "No horizontal scrolling on phones (375px) or desktops (1440px).",
+         "check_type": "responsive_layout", "parameters": {"path": "/", "viewports": [375, 1440]}, "is_objective": true,
+         "rationale": "The client asked for it to work on mobile."},
+        {"id": "M1-C5", "description": "The page loads in under 3 seconds and weighs under 2000 KB.",
+         "check_type": "performance", "parameters": {"path": "/", "max_load_seconds": 3.0, "max_page_weight_kb": 2000}, "is_objective": true,
+         "rationale": "The client asked for it to load fast."},
+        {"id": "M1-C6", "description": "The page layout matches the agreed mockup (hero, menu, contact form, footer).",
+         "check_type": "visual_match", "parameters": {"path": "/", "min_match_score": 0.7}, "is_objective": true,
+         "rationale": "The client supplied a mockup."},
+        {"id": "M1-C7", "description": "The client receives contact form submissions by email.",
+         "check_type": "manual", "parameters": {}, "is_objective": false,
+         "rationale": "Email delivery can't be observed from the website."}
+      ]
+    }
+  ]
+}

@@ -1,40 +1,12 @@
 """Real-browser tests against the demo sites (good, buggy, malicious) served locally."""
 
-import threading
-from collections.abc import AsyncIterator, Iterator
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
 
 import pytest
-import pytest_asyncio
 
 from app.verification.web_checks import WebChecker, resolve_url
 
-DEMO_DIR = Path(__file__).resolve().parents[2] / "demo"
-
 pytestmark = pytest.mark.asyncio(loop_scope="session")
-
-
-class _QuietHandler(SimpleHTTPRequestHandler):
-    def log_message(self, *args: Any) -> None:
-        pass
-
-
-@pytest.fixture(scope="session")
-def demo_url() -> Iterator[str]:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(_QuietHandler, directory=DEMO_DIR))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
-    server.shutdown()
-
-
-@pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def web(tmp_path_factory: pytest.TempPathFactory) -> AsyncIterator[WebChecker]:
-    async with WebChecker(tmp_path_factory.mktemp("artifacts"), timeout_seconds=10) as checker:
-        yield checker
 
 
 def site(demo_url: str, name: str) -> str:

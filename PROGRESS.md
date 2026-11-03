@@ -46,3 +46,18 @@
   count as present; success must APPEAR after submit; AI locator only proposes, browser verifies.
 - Not built: tests_pass sandbox (STRETCH).
 - Next: M5 verification graph + LLM judge.
+
+## 2026-11-03: M5 Verification graph + LLM judge
+- Built: `verification/report.py` (Submission, Verdict, report, progress events),
+  `agents/judge.py` (per-criterion gpt-4o judge, untrusted content fenced, `combine` fail-safe
+  rules, rules-only fallback), `verification/runner.py` (criterion -> check dispatch),
+  `workflows/verification_graph.py` (LangGraph plan -> parallel checks -> parallel judge ->
+  report, bounded concurrency, SSE-ready events), `demo/contracts/bakery.json`,
+  `scripts/verify_demo.py`.
+- Works: 119 tests. Live with gpt-4o: good-site PASSED (6 pass + 1 manual, ~12s); buggy-site
+  FAILED (form + mobile) with fix suggestions; malicious-site FAILED.
+- Decisions: judge can never upgrade a failed check (-> human); low-confidence passes -> human;
+  check crash -> human; manual criteria don't block PASSED, client confirms them at approval.
+- Known: judge confidence clusters at 0.95 (calibration to measure in M9). Injection attempts
+  are defeated but not yet *flagged* in the report (M8 detector).
+- Next: M6 persistence + state machine.

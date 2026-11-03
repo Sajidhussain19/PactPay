@@ -1,9 +1,15 @@
 import os
 import ssl
+import threading
 from collections.abc import AsyncIterator, Iterator
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
+import pytest_asyncio
 import respx
 from fastapi.testclient import TestClient
 
@@ -13,6 +19,7 @@ for _secret in ("PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID",
     os.environ[_secret] = ""
 
 from app.paypal.client import PayPalClient  # noqa: E402
+from app.verification.web_checks import WebChecker  # noqa: E402
 from tests.paypal_mocks import BASE_URL, no_sleep, token_response  # noqa: E402
 
 # Building an SSL context is slow (~1s on Windows); share one across tests.
@@ -46,3 +53,27 @@ async def paypal(mock_paypal: respx.MockRouter) -> AsyncIterator[PayPalClient]:
         sleep=no_sleep,
     ) as client:
         yield client
+
+
+DEMO_DIR = Path(__file__).resolve().parents[2] / "demo"
+
+
+class _QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, *args: Any) -> None:
+        pass
+
+
+@pytest.fixture(scope="session")
+def demo_url() -> Iterator[str]:
+    """Serves demo/ (good, buggy and malicious sites) on a random local port."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(_QuietHandler, directory=DEMO_DIR))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def web(tmp_path_factory: pytest.TempPathFactory) -> AsyncIterator[WebChecker]:
+    """One Chromium for the whole session; each check still gets an isolated context."""
+    async with WebChecker(tmp_path_factory.mktemp("artifacts"), timeout_seconds=10) as checker:
+        yield checker
