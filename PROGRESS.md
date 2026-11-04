@@ -100,3 +100,20 @@
   connection -> flaky with background tasks, tests now use a SQLite file per test.
   Port 8000 is used by another app on this machine; dev server runs on 8010.
 - Next: M8 security (injection detector + flags in report, SSRF guard), then evals.
+
+## 2026-11-04: M8 Security
+- Built: `security/url_guard.py` (SSRF: resolve + reject non-public IPs, schemes, creds,
+  ports), browser request routing that follows every redirect hop itself, `security/injection.py`
+  (deterministic prompt-injection detector, hidden sources = HIGH), `security/scanner.py` (page
+  hidden text/comments/meta/attributes + repo docs), parallel LangGraph `security_scan` branch,
+  flags force NEEDS_REVIEW, `security_flag` SSE events, `demo/sneaky-site`, `docs/security.md`
+  (10 attacks -> defense -> test), AI/money import-boundary test.
+- Works: 484 tests. Live gpt-4o on sneaky-site: 6/6 checks pass, 7 HIGH flags -> NEEDS_REVIEW.
+  Good site has zero flags (no false positive).
+- Found and fixed a real gap: Playwright routes don't see redirect targets, so a public URL
+  could 302 to 169.254.169.254 (verified experimentally). Now every hop is validated.
+- Decisions: detector is regex, not LLM (not injectable, explainable); only repo *docs* are
+  scanned (code has legit prompts/config); ALLOW_PRIVATE_URLS for local demo, refused in prod.
+- Residual risks documented: DNS rebinding (needs egress firewall), paraphrased injections,
+  text inside images, no tests_pass sandbox.
+- Next: M9 evals.

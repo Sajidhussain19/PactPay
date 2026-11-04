@@ -16,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.contract_schema import CheckType, Criterion, Milestone
 from app.agents.judge import Judge, combine, manual_verdict
+from app.security.injection import SecurityFlag
 from app.verification.models import CheckResult
 from app.verification.report import (
     CriterionVerdict,
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 CheckFn = Callable[[Criterion, Submission], Awaitable[CheckResult]]
 EventFn = Callable[[VerificationEvent], Awaitable[None]]
+ScanFn = Callable[[Submission], Awaitable[list[SecurityFlag]]]
 
 
 class VerificationState(TypedDict, total=False):
@@ -39,6 +41,7 @@ class VerificationState(TypedDict, total=False):
     manual: list[Criterion]
     checks: dict[str, CheckResult]
     verdicts: list[CriterionVerdict]
+    security_flags: list[SecurityFlag]
     report: VerificationReport
 
 
@@ -55,21 +58,26 @@ class VerificationWorkflow:
         confidence_threshold: float = 0.8,
         max_parallel_checks: int = 3,
         on_event: EventFn = _ignore,
+        security_scan: ScanFn | None = None,
     ) -> None:
         self._run_check = run_check
         self._judge = judge
         self._threshold = confidence_threshold
         self._semaphore = asyncio.Semaphore(max_parallel_checks)
         self._emit = on_event
+        self._security_scan = security_scan
 
         graph = StateGraph(VerificationState)
         graph.add_node("plan", self._plan)
         graph.add_node("run_checks", self._run_checks)
+        graph.add_node("security_scan", self._scan)
         graph.add_node("judge", self._judge_all)
         graph.add_node("report", self._report)
         graph.add_edge(START, "plan")
+        # Checks and the security scan run as parallel branches; judge waits for both.
         graph.add_edge("plan", "run_checks")
-        graph.add_edge("run_checks", "judge")
+        graph.add_edge("plan", "security_scan")
+        graph.add_edge(["run_checks", "security_scan"], "judge")
         graph.add_edge("judge", "report")
         graph.add_edge("report", END)
         self._graph = graph.compile()
@@ -131,6 +139,24 @@ class VerificationWorkflow:
         results = await asyncio.gather(*(run_one(c) for c in state["automated"]))
         return {"checks": {r.criterion_id: r for r in results}}
 
+    async def _scan(self, state: VerificationState) -> VerificationState:
+        if self._security_scan is None:
+            return {"security_flags": []}
+        try:
+            flags = await self._security_scan(state["submission"])
+        except Exception:
+            logger.exception("Security scan crashed")
+            flags = []
+        for flag in flags:
+            await self._emit(
+                VerificationEvent(
+                    type="security_flag",
+                    status=flag.severity,
+                    summary=f"{flag.pattern} in {flag.source}: {flag.snippet}",
+                )
+            )
+        return {"security_flags": flags}
+
     async def _judge_all(self, state: VerificationState) -> VerificationState:
         async def judge_one(criterion: Criterion) -> CriterionVerdict:
             check = state["checks"][criterion.id]
@@ -170,12 +196,13 @@ class VerificationWorkflow:
         report = VerificationReport(
             milestone_id=state["milestone"].id,
             submission=state["submission"],
-            overall=overall_verdict(verdicts),
+            overall=overall_verdict(verdicts, state.get("security_flags")),
             criteria=verdicts,
             counts=counts,
             started_at=state["started_at"],
             finished_at=finished,
             duration_ms=int((finished - state["started_at"]).total_seconds() * 1000),
+            security_flags=state.get("security_flags", []),
         )
         await self._emit(VerificationEvent(type="report_ready", status=report.overall))
         return {"report": report}

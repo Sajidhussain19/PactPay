@@ -19,6 +19,7 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["ARTIFACTS_DIR"] = tempfile.mkdtemp(prefix="pactpay-test-artifacts-")
 os.environ["AUTO_APPROVE_CHECK_SECONDS"] = "0"  # no background scheduler in tests
 os.environ["DEMO_MODE"] = "true"
+os.environ["ALLOW_PRIVATE_URLS"] = "true"  # demo sites are served from 127.0.0.1
 os.environ["DEMO_FREELANCER_PAYPAL_EMAIL"] = "freelancer-sandbox@personal.example.com"
 # Environment variables beat backend/.env, so tests never use real keys or spend credits.
 for _secret in ("PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID", "OPENAI_API_KEY"):

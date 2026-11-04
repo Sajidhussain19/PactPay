@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from app.agents.contract_schema import CheckType
+from app.security.injection import SecurityFlag
 from app.verification.models import CheckResult
 
 
@@ -54,7 +55,7 @@ class VerificationReport(BaseModel):
     started_at: datetime
     finished_at: datetime
     duration_ms: int
-    security_flags: list[str] = Field(default_factory=list)
+    security_flags: list[SecurityFlag] = Field(default_factory=list)
 
     @property
     def fixes(self) -> list[str]:
@@ -68,7 +69,9 @@ class VerificationReport(BaseModel):
 class VerificationEvent(BaseModel):
     """Progress events for the live UI (streamed over SSE)."""
 
-    type: Literal["started", "check_started", "check_finished", "judged", "report_ready"]
+    type: Literal[
+        "started", "check_started", "check_finished", "judged", "security_flag", "report_ready"
+    ]
     criterion_id: str | None = None
     check_type: CheckType | None = None
     status: str | None = None
@@ -76,11 +79,16 @@ class VerificationEvent(BaseModel):
     screenshot: str | None = None
 
 
-def overall_verdict(verdicts: list[CriterionVerdict]) -> OverallVerdict:
+def overall_verdict(
+    verdicts: list[CriterionVerdict], security_flags: list[SecurityFlag] | None = None
+) -> OverallVerdict:
     states = {v.verdict for v in verdicts}
     if Verdict.FAIL in states:
         return OverallVerdict.FAILED
     if Verdict.NEEDS_REVIEW in states or not states - {Verdict.MANUAL}:
         # Nothing was verified automatically -> a human must look.
+        return OverallVerdict.NEEDS_REVIEW
+    if security_flags:
+        # Someone tried to manipulate the verifier: never auto-approve, even if checks pass.
         return OverallVerdict.NEEDS_REVIEW
     return OverallVerdict.PASSED

@@ -17,8 +17,10 @@ from app.api.deps import (
 )
 from app.api.schemas import MilestoneOut, RunOut
 from app.models.db import MilestoneRecord, SubmissionRecord, User
+from app.security.url_guard import UnsafeURLError, URLGuard
 from app.services.milestones import MilestoneService
 from app.services.verification_manager import latest_run
+from app.verification.repo_check import RepoError, parse_github_url
 from app.workflows.milestone_state import Action, MilestoneState, Role
 
 router = APIRouter(tags=["milestones"])
@@ -142,6 +144,7 @@ async def paypal_return(
 async def submit(
     milestone_id: str,
     body: SubmissionRequest,
+    request: Request,
     user: UserDep,
     session: SessionDep,
     settings: SettingsDep,
@@ -151,6 +154,7 @@ async def submit(
     milestone, role = await _load(session, milestone_id, user)
     if role is not Role.FREELANCER:
         raise HTTPException(status_code=403, detail="Only the freelancer can submit work")
+    await _check_submission_urls(request, body)
     if milestone.state not in {MilestoneState.FUNDED, MilestoneState.FAILED}:
         raise HTTPException(status_code=409, detail=f"Milestone is {milestone.state}; can't submit")
     session.add(
@@ -312,6 +316,17 @@ async def cancel(
     await _load(session, milestone_id, user)
     await payments.cancel(milestone_id, user)
     return await _out(session, milestone_id, user, settings)
+
+
+async def _check_submission_urls(request: Request, body: SubmissionRequest) -> None:
+    """Reject URLs that would make our browser or git reach private networks (SSRF)."""
+    guard: URLGuard = request.app.state.url_guard
+    try:
+        await guard.check_url(body.live_url)
+        if body.repo_url:
+            parse_github_url(body.repo_url)
+    except (UnsafeURLError, RepoError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _follow_payout(request: Request, milestone: MilestoneRecord) -> None:

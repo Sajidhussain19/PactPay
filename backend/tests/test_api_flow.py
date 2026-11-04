@@ -25,11 +25,11 @@ from app.paypal.errors import PayPalError
 from app.paypal.orders import Authorization, AuthorizedOrder, Capture, CreatedOrder
 from app.paypal.payouts import PayoutBatch, PayoutItemStatus
 from app.paypal.webhooks import InMemoryEventStore, WebhookProcessor
+from app.security.url_guard import URLGuard
 from app.services.payments import PaymentRuntime
-from app.services.verification_manager import VerificationManager
+from app.services.verification_manager import RunTools, VerificationManager
 from app.verification.models import CheckResult
 from app.verification.report import Submission
-from app.workflows.verification_graph import CheckFn
 from tests.conftest import DEMO_DIR, auth_headers
 
 BAKERY = json.loads((DEMO_DIR / "contracts" / "bakery.json").read_text())
@@ -180,7 +180,7 @@ def world(client: TestClient) -> Iterator[World]:
     runtime = PaymentRuntime(app.state.session_factory, orders, payouts, settings)
     app.state.payments = runtime
 
-    async def check_factory(artifacts: Path, mockup: bytes | None) -> CheckFn:
+    async def check_factory(artifacts: Path, mockup: bytes | None) -> RunTools:
         async def run(criterion: Criterion, submission: Submission) -> CheckResult:
             passed = criterion.id not in failing
             return CheckResult(
@@ -190,7 +190,7 @@ def world(client: TestClient) -> Iterator[World]:
                 summary="ok" if passed else "Submitting caused 1 JS error and no confirmation",
             )
 
-        return run
+        return RunTools(run_check=run)
 
     app.state.verifier = VerificationManager(
         app.state.session_factory, settings, check_factory=check_factory, judge=RuleJudge()
@@ -352,8 +352,8 @@ def test_needs_review_then_human_passes(world: World) -> None:
             criterion_id=criterion.id, check_type=criterion.check_type, passed=None, summary="?"
         )
 
-    async def factory(artifacts: Path, mockup: bytes | None) -> CheckFn:
-        return unsure
+    async def factory(artifacts: Path, mockup: bytes | None) -> RunTools:
+        return RunTools(run_check=unsure)
 
     world.client.app.state.verifier._check_factory = factory
     assert world.submit_and_wait(mid)["state"] == "needs_review"
@@ -464,3 +464,31 @@ def test_contract_total_must_match_milestones(world: World) -> None:
     bad = {**BAKERY, "total": "999.00"}
     response = world.client.post("/contracts", json={"contract": bad}, headers=world.as_client)
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("live_url", "repo_url"),
+    [
+        ("http://169.254.169.254/latest/meta-data/", None),
+        ("http://localhost:5432/", None),
+        ("file:///etc/passwd", None),
+        ("https://example.com/", "https://evil.example/repo.git"),
+    ],
+)
+def test_unsafe_submission_urls_are_rejected(
+    world: World, live_url: str, repo_url: str | None
+) -> None:
+    world.client.app.state.url_guard = URLGuard(allow_private=False)
+    mid = world.create_agreed_milestone()
+    world.fund(mid)
+
+    response = world.client.post(
+        f"/milestones/{mid}/submissions",
+        json={"live_url": live_url, "repo_url": repo_url},
+        headers=world.as_freelancer,
+    )
+
+    assert response.status_code == 422
+    milestone = world.get(mid)
+    assert milestone["state"] == "funded"  # nothing ran, nothing changed
+    assert milestone["submissions"] == []

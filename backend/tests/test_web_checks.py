@@ -6,8 +6,6 @@ import pytest
 
 from app.verification.web_checks import WebChecker, resolve_url
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
-
 
 def site(demo_url: str, name: str) -> str:
     return f"{demo_url}/{name}/"

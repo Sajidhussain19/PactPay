@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     demo_freelancer_paypal_email: str = ""
 
     # Verification
+    # Allow submitted URLs on localhost/private networks. Local demo only; refused in production.
+    allow_private_urls: bool = False
     artifacts_dir: Path = Path("artifacts")
     check_timeout_seconds: float = 20.0
     repo_max_size_mb: int = 50

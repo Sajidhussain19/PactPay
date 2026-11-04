@@ -12,6 +12,7 @@ run as errored and returns the milestone to SUBMITTED so it can be re-verified.
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select
@@ -34,12 +35,19 @@ from app.verification.report import (
     VerificationReport,
 )
 from app.workflows.milestone_state import Action, MilestoneState, Role
-from app.workflows.verification_graph import CheckFn, VerificationWorkflow
+from app.workflows.verification_graph import CheckFn, ScanFn, VerificationWorkflow
 
 logger = logging.getLogger(__name__)
 
-# Builds the check function for one run: (artifacts dir for this run, mockup bytes) -> CheckFn
-CheckFactory = Callable[[Path, bytes | None], Awaitable[CheckFn]]
+
+@dataclass
+class RunTools:
+    run_check: CheckFn
+    security_scan: ScanFn | None = None
+
+
+# Builds the tools for one run: (artifacts dir for this run, mockup bytes) -> RunTools
+CheckFactory = Callable[[Path, bytes | None], Awaitable[RunTools]]
 
 OUTCOME_ACTIONS = {
     OverallVerdict.PASSED: Action.VERIFICATION_PASSED,
@@ -159,12 +167,13 @@ class VerificationManager:
         artifacts.mkdir(parents=True, exist_ok=True)
         try:
             async with self._slots:
-                run_check = await self._check_factory(artifacts, mockup)
+                tools = await self._check_factory(artifacts, mockup)
                 workflow = VerificationWorkflow(
-                    run_check,
+                    tools.run_check,
                     self._judge,
                     confidence_threshold=self._settings.judge_confidence_threshold,
                     on_event=lambda e: channel.publish(_public_event(e, self._settings)),
+                    security_scan=tools.security_scan,
                 )
                 report = await workflow.run(domain_milestone, submission)  # type: ignore[arg-type]
             report = _public_report(report, self._settings)

@@ -12,8 +12,6 @@ from app.verification.web_checks import WebChecker
 from app.workflows.verification_graph import VerificationWorkflow
 from tests.conftest import DEMO_DIR
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
-
 BAKERY = Contract.model_validate_json((DEMO_DIR / "contracts" / "bakery.json").read_text())
 MILESTONE = BAKERY.milestones[0]
 SUBMISSION = Submission(live_url="https://freelancer.example/")

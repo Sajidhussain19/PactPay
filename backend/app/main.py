@@ -26,16 +26,17 @@ from app.paypal.errors import PayPalError
 from app.paypal.orders import OrdersService
 from app.paypal.payouts import PayoutsService
 from app.paypal.webhooks import WebhookProcessor, WebhookVerifier
+from app.security.scanner import SubmissionScanner
+from app.security.url_guard import URLGuard
 from app.services.contracts import PermissionDeniedError
 from app.services.demo import ensure_demo_users
 from app.services.milestones import ConcurrentUpdateError, NotFoundError
 from app.services.payments import PaymentError, PaymentRuntime
 from app.services.records import SqlEventStore
-from app.services.verification_manager import VerificationManager
+from app.services.verification_manager import RunTools, VerificationManager
 from app.verification.runner import CheckRunner
 from app.verification.web_checks import LLMSelectorSuggester, WebChecker
 from app.workflows.milestone_state import IllegalTransitionError
-from app.workflows.verification_graph import CheckFn
 
 logger = logging.getLogger(__name__)
 
@@ -43,27 +44,37 @@ logger = logging.getLogger(__name__)
 class BrowserHolder:
     """One Chromium per process, started on first use (most requests never need it)."""
 
-    def __init__(self, settings: Settings, llm: StructuredLLM | None) -> None:
+    def __init__(self, settings: Settings, llm: StructuredLLM | None, guard: URLGuard) -> None:
         self._settings = settings
         self._llm = llm
+        self._guard = guard
         self._web: WebChecker | None = None
         self._lock = asyncio.Lock()
 
-    async def check_factory(self, artifacts: Path, mockup: bytes | None) -> CheckFn:
+    async def check_factory(self, artifacts: Path, mockup: bytes | None) -> RunTools:
         async with self._lock:
             if self._web is None:
                 self._web = await WebChecker(
                     self._settings.artifacts_dir,
                     timeout_seconds=self._settings.check_timeout_seconds,
                     locator=LLMSelectorSuggester(self._llm) if self._llm else None,
+                    url_guard=self._guard,
                 ).__aenter__()
-        return CheckRunner(
-            self._web.scoped(artifacts),
-            artifacts_dir=artifacts,
-            llm=self._llm,
-            mockup=mockup,
-            repo_max_size_mb=self._settings.repo_max_size_mb,
-            repo_timeout_seconds=self._settings.repo_clone_timeout_seconds,
+        web = self._web.scoped(artifacts)
+        return RunTools(
+            run_check=CheckRunner(
+                web,
+                artifacts_dir=artifacts,
+                llm=self._llm,
+                mockup=mockup,
+                repo_max_size_mb=self._settings.repo_max_size_mb,
+                repo_timeout_seconds=self._settings.repo_clone_timeout_seconds,
+            ),
+            security_scan=SubmissionScanner(
+                web,
+                repo_max_size_mb=self._settings.repo_max_size_mb,
+                repo_timeout_seconds=self._settings.repo_clone_timeout_seconds,
+            ),
         )
 
     async def aclose(self) -> None:
@@ -88,6 +99,8 @@ def _check_production_settings(settings: Settings) -> None:
         raise RuntimeError("PAYPAL_WEBHOOK_SKIP_VERIFY must never be enabled in production")
     if settings.secret_key.get_secret_value() == DEV_SECRET_KEY:
         raise RuntimeError("Set SECRET_KEY in production")
+    if settings.allow_private_urls:
+        raise RuntimeError("ALLOW_PRIVATE_URLS must never be enabled in production (SSRF)")
 
 
 @asynccontextmanager
@@ -122,7 +135,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     llm = build_llm(settings)
     app.state.llm = llm
     judge: Judge = LLMJudge(llm) if llm else RuleJudge()
-    browser = BrowserHolder(settings, llm)
+    guard = URLGuard(allow_private=settings.allow_private_urls)
+    app.state.url_guard = guard
+    browser = BrowserHolder(settings, llm, guard)
     app.state.verifier = VerificationManager(
         session_factory, settings, check_factory=browser.check_factory, judge=judge
     )

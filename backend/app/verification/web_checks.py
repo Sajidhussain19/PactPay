@@ -18,6 +18,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
 from typing import Any, Protocol, Self
 from urllib.parse import urljoin, urlsplit
@@ -27,6 +28,8 @@ from playwright.async_api import (
     Locator,
     Page,
     Playwright,
+    Response,
+    Route,
     async_playwright,
 )
 from playwright.async_api import (
@@ -36,6 +39,7 @@ from pydantic import BaseModel
 
 from app.agents.contract_schema import CheckType
 from app.core.llm import LLMError, StructuredLLM
+from app.security.url_guard import UnsafeURLError, URLGuard
 from app.verification.models import CheckResult, Evidence
 
 logger = logging.getLogger(__name__)
@@ -47,6 +51,7 @@ SUCCESS_PATTERN = re.compile(
     re.I,
 )
 SETTLE_MS = 750
+MAX_REDIRECTS = 5
 MAX_LOG_LINES = 20
 
 TEST_DATA = {
@@ -70,6 +75,7 @@ class _ConsoleCollector:
 
     def __init__(self, page: Page) -> None:
         self.errors: list[str] = []
+        self.blocked: list[str] = []
         page.on("console", self._on_console)
         page.on("pageerror", lambda exc: self.errors.append(f"Uncaught exception: {exc}"))
         page.on("requestfailed", self._on_request_failed)
@@ -83,6 +89,8 @@ class _ConsoleCollector:
         self.errors.append(f"Console error: {message.text}")
 
     def _on_request_failed(self, request: Any) -> None:
+        if request.url in self.blocked:
+            return  # already recorded as blocked by the URL guard
         if request.url.endswith("favicon.ico"):
             return
         self.errors.append(f"Request failed: {request.url} ({request.failure})")
@@ -108,10 +116,12 @@ class WebChecker:
         *,
         timeout_seconds: float = 20.0,
         locator: SelectorSuggester | None = None,
+        url_guard: URLGuard | None = None,
     ) -> None:
         self._artifacts_dir = artifacts_dir
         self._timeout_ms = timeout_seconds * 1000
         self._locator = locator
+        self._guard = url_guard
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
 
@@ -141,7 +151,7 @@ class WebChecker:
     async def page_loads(self, criterion_id: str, url: str) -> CheckResult:
         async def check(evidence: Evidence) -> tuple[bool, str]:
             async with self._page() as (page, console):
-                response = await page.goto(url, wait_until="load")
+                response = await self._goto(page, url)
                 await page.wait_for_timeout(SETTLE_MS)
                 status = response.status if response else None
                 evidence.measurements |= {"status": status, "title": await page.title()}
@@ -171,7 +181,7 @@ class WebChecker:
             if not selector and not text:
                 raise ValueError("element_present needs a selector or text")
             async with self._page() as (page, _):
-                await page.goto(url, wait_until="load")
+                await self._goto(page, url)
                 found: list[str] = []
                 missing: list[str] = []
 
@@ -205,7 +215,7 @@ class WebChecker:
     ) -> CheckResult:
         async def check(evidence: Evidence) -> tuple[bool, str]:
             async with self._page() as (page, console):
-                await page.goto(url, wait_until="load")
+                await self._goto(page, url)
                 form = page.locator(form_selector or "form").first
                 if not await form.count():
                     evidence.screenshots.append(await self._screenshot(page, criterion_id, "page"))
@@ -276,7 +286,7 @@ class WebChecker:
             overflowing: list[str] = []
             for width in viewports:
                 async with self._page(width=width, height=800) as (page, _):
-                    await page.goto(url, wait_until="load")
+                    await self._goto(page, url)
                     overflow = await page.evaluate(
                         "() => Math.max(document.documentElement.scrollWidth,"
                         " document.body ? document.body.scrollWidth : 0) - window.innerWidth"
@@ -303,7 +313,7 @@ class WebChecker:
     ) -> CheckResult:
         async def check(evidence: Evidence) -> tuple[bool, str]:
             async with self._page() as (page, _):
-                await page.goto(url, wait_until="load")
+                await self._goto(page, url)
                 await page.wait_for_function(
                     "() => performance.getEntriesByType('navigation')[0]?.loadEventEnd > 0"
                 )
@@ -340,7 +350,7 @@ class WebChecker:
     async def screenshot(self, url: str, *, width: int = 1440) -> bytes:
         """Full-page PNG, used by visual_match."""
         async with self._page(width=width) as (page, _):
-            await page.goto(url, wait_until="load")
+            await self._goto(page, url)
             await page.wait_for_timeout(SETTLE_MS)
             return await page.screenshot(full_page=True, type="png")
 
@@ -362,7 +372,10 @@ class WebChecker:
             page = await context.new_page()
             page.set_default_timeout(self._timeout_ms)
             page.set_default_navigation_timeout(self._timeout_ms)
-            yield page, _ConsoleCollector(page)
+            collector = _ConsoleCollector(page)
+            if self._guarding:
+                await page.route("**/*", partial(self._guard_route, collector=collector))
+            yield page, collector
         finally:
             await context.close()
 
@@ -378,6 +391,8 @@ class WebChecker:
         error = None
         try:
             passed, summary = await check(evidence)
+        except UnsafeURLError as exc:
+            passed, summary, error = False, "Blocked: URL points at a non-public address", str(exc)
         except PlaywrightError as exc:
             # The site failed to load or respond in time: that's the deliverable's problem.
             passed, summary = False, "Site could not be checked (load error or timeout)"
@@ -394,6 +409,79 @@ class WebChecker:
             error=error,
             duration_ms=int((time.monotonic() - started) * 1000),
         )
+
+    @property
+    def _guarding(self) -> bool:
+        return self._guard is not None and not self._guard.allow_private
+
+    async def _goto(self, page: Page, url: str) -> Response | None:
+        """Navigate with SSRF checks on every redirect hop, before and after."""
+        if self._guard is not None:
+            await self._guard.check_url(url)
+        if self._guarding:
+            url = await self._resolve_redirects(page, url)
+        response = await page.goto(url, wait_until="load")
+        if self._guard is not None and not await self._guard.allowed(page.url):
+            raise UnsafeURLError(f"Page ended up on a non-public address: {page.url}")
+        return response
+
+    async def _resolve_redirects(self, page: Page, url: str) -> str:
+        """Follow the redirect chain ourselves, checking each hop, so the browser navigates
+        straight to the final URL (keeps relative links right, e.g. /repo -> /repo/)."""
+        assert self._guard is not None
+        current = url
+        for _ in range(MAX_REDIRECTS + 1):
+            await self._guard.check_url(current)
+            response = await page.context.request.get(
+                current, max_redirects=0, timeout=self._timeout_ms
+            )
+            location = response.headers.get("location")
+            await response.dispose()
+            if not (300 <= response.status < 400 and location):
+                return current
+            current = urljoin(current, location)
+        raise UnsafeURLError(f"More than {MAX_REDIRECTS} redirects")
+
+    async def _guard_route(self, route: Route, *, collector: _ConsoleCollector) -> None:
+        """Every browser request passes through here when the guard is on.
+
+        Chromium follows redirects without consulting routes, so a public URL could bounce to
+        169.254.169.254. We therefore fetch each request ourselves with redirects disabled,
+        validate every hop, and hand the browser only the final response.
+        """
+        assert self._guard is not None
+        request = route.request
+        current, method, body = request.url, request.method, request.post_data_buffer
+        for _ in range(MAX_REDIRECTS + 1):
+            if not await self._guard.allowed(current):
+                collector.blocked.append(request.url)
+                collector.errors.append(f"Blocked request to a non-public address: {current[:200]}")
+                await route.abort("blockedbyclient")
+                return
+            if urlsplit(current).scheme not in {"http", "https"}:
+                await route.continue_()
+                return
+            response = await route.fetch(
+                url=current, method=method, post_data=body, max_redirects=0
+            )
+            location = response.headers.get("location")
+            if not (300 <= response.status < 400 and location):
+                await route.fulfill(response=response)
+                return
+            if response.status in {301, 302, 303} and method not in {"GET", "HEAD"}:
+                method, body = "GET", None  # browsers switch to GET after these redirects
+            current = urljoin(current, location)
+        collector.errors.append(f"Too many redirects: {request.url[:200]}")
+        await route.abort("failed")
+
+    async def untrusted_content(self, url: str) -> "UntrustedContent":
+        """Everything on the page a human might NOT see: hidden text, comments, meta tags,
+        attributes. Used by the security scanner, never shown to the judge as instructions."""
+        async with self._page() as (page, _):
+            await self._goto(page, url)
+            await page.wait_for_timeout(SETTLE_MS)
+            raw = await page.evaluate(UNTRUSTED_CONTENT_JS)
+        return UntrustedContent.model_validate(raw)
 
     async def _find_selector(
         self, page: Page, selector: str, description: str, evidence: Evidence
@@ -444,6 +532,49 @@ class WebChecker:
 
 
 # ------------------------------------------------------------ page helpers
+
+
+class UntrustedContent(BaseModel):
+    visible: str
+    hidden: list[str]
+    comments: list[str]
+    metas: list[str]
+    attrs: list[str]
+
+
+UNTRUSTED_CONTENT_JS = """() => {
+    const hidden = [], attrs = [], comments = [], metas = [];
+    const pageWidth = document.documentElement.scrollWidth;
+    const isHidden = (el) => {
+        const s = getComputedStyle(el), r = el.getBoundingClientRect();
+        return s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) === 0
+            || parseFloat(s.fontSize) < 2 || r.right <= 0 || r.bottom <= 0 || r.left >= pageWidth
+            || (r.width <= 1 && r.height <= 1) || s.color === s.backgroundColor;
+    };
+    for (const el of document.querySelectorAll('body *')) {
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE'].includes(el.tagName)) continue;
+        const own = Array.from(el.childNodes).filter(n => n.nodeType === 3)
+            .map(n => n.textContent).join(' ').trim();
+        if (own && isHidden(el)) hidden.push(own.slice(0, 2000));
+        for (const name of el.getAttributeNames()) {
+            const described = ['alt', 'title', 'aria-label', 'placeholder'].includes(name);
+            if (described || name.startsWith('data-')) {
+                attrs.push(`${name}: ${el.getAttribute(name)}`.slice(0, 500));
+            }
+        }
+    }
+    const walker = document.createTreeWalker(document, NodeFilter.SHOW_COMMENT);
+    while (walker.nextNode()) comments.push(walker.currentNode.textContent.trim().slice(0, 2000));
+    for (const m of document.querySelectorAll('meta[content]')) {
+        const key = m.getAttribute('name') || m.getAttribute('property')
+            || m.getAttribute('http-equiv') || '';
+        metas.push(`${key}: ${m.getAttribute('content')}`.slice(0, 500));
+    }
+    let visible = document.body ? document.body.innerText : '';
+    for (const text of hidden) visible = visible.split(text).join(' ');
+    return {visible: visible.slice(0, 50000), hidden, comments, metas, attrs};
+}"""
+
 
 PAGE_OUTLINE_JS = """() => {
     const out = [];
