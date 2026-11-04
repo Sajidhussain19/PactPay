@@ -75,6 +75,18 @@ async def test_visual_match_fails_and_names_missing_sections() -> None:
     assert "missing: section 1, section 2" in result.summary
 
 
+async def test_any_missing_section_fails_even_above_threshold() -> None:
+    llm = FakeVisionLLM(comparison("match", "match", "match", "match", "missing"))  # 80%
+
+    result = await visual_match(
+        llm, criterion_id="V1", mockup=b"m", screenshot=b"s", min_match_score=0.7
+    )
+
+    assert result.evidence.measurements["match_score"] == 0.8
+    assert result.passed is False
+    assert "missing: section 4" in result.summary
+
+
 async def test_visual_match_llm_failure_needs_human() -> None:
     llm = FakeVisionLLM(LLMError("timeout"))
 

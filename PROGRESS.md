@@ -117,3 +117,19 @@
 - Residual risks documented: DNS rebinding (needs egress firewall), paraphrased injections,
   text inside images, no tests_pass sandbox.
 - Next: M9 evals.
+
+## 2026-11-04: M9 Evals
+- Built: `backend/evals/` (49 generated deliveries with labels by construction: 16 honest,
+  22 defects, 11 manipulation attempts; metrics incl. unsafe auto-pass, false pass/fail,
+  routed-to-human, injection catch/false alarms, cost, time), `run_evals.py` (rules or llm
+  judge, markdown report, CI gate), CI `evals` job (fails >5% false pass), LLM token tracking.
+- Results (gpt-4o, v3): false pass 0/32, false fail 0/260, honest auto-paid 16/16, unsafe
+  auto-pass 1/32 (paraphrased injection), injections flagged 10/11 with 0/38 false alarms,
+  ~$0.023 and 7 LLM calls per delivery. Rules mode: 0 false pass, 0 false fail.
+- Evals found: visual match averaged away a missing contact form (80% passed). Fixed: any
+  missing section fails; prompt says sections are defined by content, not headings. v1 (blind)
+  vs v3 documented in evals/README.md; v3 is tuned on this set, so it's optimistic.
+- Deliberately NOT fixed: paraphrased injection (would be overfitting the eval).
+- Judge confidence never fell below 0.8 -> 0% routed to human; calibration is a known gap.
+- Gotcha: laptop Modern Standby froze a profiling run for 2.8h; keep it plugged in for runs.
+- Next: M10 frontend.

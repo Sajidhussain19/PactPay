@@ -5,6 +5,7 @@ the provider can change without touching agent code.
 """
 
 import base64
+from collections import Counter
 from collections.abc import Sequence
 from typing import Protocol, TypeVar
 
@@ -32,6 +33,7 @@ class OpenAIStructuredLLM:
     ) -> None:
         self._client = client or AsyncOpenAI(api_key=api_key, timeout=timeout, max_retries=2)
         self._model = model
+        self.usage: Counter[str] = Counter()  # calls, input_tokens, output_tokens (for evals)
 
     async def parse(
         self, *, system: str, user: str, schema: type[T], images: Sequence[bytes] = ()
@@ -54,6 +56,10 @@ class OpenAIStructuredLLM:
         except OpenAIError as exc:
             raise LLMError(f"OpenAI call failed: {exc}") from exc
 
+        self.usage["calls"] += 1
+        if completion.usage:
+            self.usage["input_tokens"] += completion.usage.prompt_tokens
+            self.usage["output_tokens"] += completion.usage.completion_tokens
         message = completion.choices[0].message
         if message.refusal:
             raise LLMError(f"Model refused: {message.refusal}")

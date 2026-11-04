@@ -29,7 +29,11 @@ List every distinct section or component in the MOCKUP (e.g. header/hero, naviga
 contact form, footer). For each, decide whether the live site has it in a comparable place:
 - match: present with essentially the same structure and position
 - partial: present but noticeably different (wrong position, missing parts)
-- missing: not present
+- missing: not present (any missing section fails the check, so only use it when the
+  section is really absent, not merely restyled or moved)
+
+A section is defined by its main content, not its heading. If only a heading or empty
+container remains (e.g. a "Contact" heading with no form fields), the section is missing.
 
 Judge layout and structure only. Ignore colours, fonts, photos and exact copy unless the mockup
 clearly specifies them. Placeholder text in a wireframe ("BAKERY NAME") matches any real text.
@@ -87,8 +91,10 @@ async def visual_match(
     evidence.logs.extend(
         f"{s.status.upper()}: {s.section} - {s.notes}" for s in comparison.sections
     )
-    passed = score >= min_match_score
     missing = [s.section for s in comparison.sections if s.status == "missing"]
+    # A section the client agreed to can't be averaged away: in evals, a page with no contact
+    # form scored 80% (4 of 5 sections) and passed. Any missing section now fails the check.
+    passed = score >= min_match_score and not missing
     summary = f"Layout match {score:.0%} (needs {min_match_score:.0%})"
     if missing:
         summary += f"; missing: {', '.join(missing)}"

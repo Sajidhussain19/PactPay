@@ -19,3 +19,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"  # one loop shared with the session-wide browser
+
+[tool.ruff.lint.per-file-ignores]
+"evals/cases.py" = ["E501"]  # HTML fixture strings read better unwrapped
