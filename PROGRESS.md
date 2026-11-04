@@ -78,3 +78,25 @@
 - Gotcha: async SQLAlchemy can't lazy-load expired attributes (MissingGreenlet); capture ids
   before commit/rollback, eager-load relationships.
 - Next: M7 REST API + SSE + release executor.
+
+## 2026-11-04: M7 API, live progress, safe release
+- Built: `services/payments.py` (the only money-moving code: fund via PayPal checkout or sandbox
+  card, authorize on return, void/refund, resumable capture -> payout release with milestone-
+  derived idempotency keys, payout polling, reauthorize-on-expiry, webhook reconciliation,
+  auto-approve timer), `services/verification_manager.py` (background runs, SSE event channels
+  with replay, restart recovery), REST API (`api/auth.py`, `contracts.py`, `milestones.py`,
+  `deps.py`, `schemas.py`), signed demo-login tokens, `/artifacts` for evidence screenshots,
+  `scripts/e2e_live.py`.
+- Works: 419 tests (12 API flow tests with fake PayPal prove: fail -> fix -> pass -> paid,
+  no double capture on double-click, capture-ok/payout-fail -> retry pays once, pending payout
+  settles via webhook, crash-before-save capture reconciled by webhook, void on cancel,
+  auto-approve after 48h, human review, SSE replay, auth/404 for strangers).
+- LIVE E2E (real sandbox + Chromium + gpt-4o, via HTTP): buggy site FAILED with fixes ->
+  good site PASSED (6 pass + 1 manual) -> capture 0UA230614E063910C -> payout SUCCESS ->
+  RELEASED, freelancer received 142.50 USD (fee 7.50).
+- Decisions: payout email checked BEFORE capture; verification runs in-process (one shared
+  Chromium, semaphore); demo auth = HMAC tokens; /contracts/draft requires login (costs credits).
+- Gotchas: async lazy-load again (save report); in-memory SQLite + StaticPool shares one
+  connection -> flaky with background tasks, tests now use a SQLite file per test.
+  Port 8000 is used by another app on this machine; dev server runs on 8010.
+- Next: M8 security (injection detector + flags in report, SSRF guard), then evals.

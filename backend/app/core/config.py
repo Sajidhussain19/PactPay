@@ -12,6 +12,8 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEV_SECRET_KEY = "dev-only-insecure-secret-change-me"  # refused in production
+
 PAYPAL_BASE_URLS: dict[str, str] = {
     "sandbox": "https://api-m.sandbox.paypal.com",
     "live": "https://api-m.paypal.com",
@@ -48,6 +50,19 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     llm_model: str = "gpt-4o"  # must support vision + structured outputs
     judge_confidence_threshold: float = 0.8
+
+    # Auth (demo logins). Must be overridden in production.
+    secret_key: SecretStr = SecretStr(DEV_SECRET_KEY)
+
+    # Release
+    auto_approve_hours: float = 48.0  # PASSED milestones auto-release if the client is silent
+    auto_approve_check_seconds: float = 300.0  # 0 disables the background scheduler
+    payout_poll_attempts: int = 12
+    payout_poll_seconds: float = 5.0
+
+    # Demo mode: seeded client/freelancer logins for judges
+    demo_mode: bool = True
+    demo_freelancer_paypal_email: str = ""
 
     # Verification
     artifacts_dir: Path = Path("artifacts")

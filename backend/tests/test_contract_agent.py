@@ -17,6 +17,7 @@ from app.agents.contract_schema import (
     LLMCriterion,
     LLMMilestone,
 )
+from tests.conftest import auth_headers
 
 BAKERY_JOB = (
     "Landing page for my bakery: menu, contact form that emails me, works on mobile, "
@@ -243,14 +244,22 @@ def test_request_rejects_non_positive_budget(budget: str) -> None:
 
 
 def test_draft_endpoint_without_llm_returns_503(client: TestClient) -> None:
-    response = client.post("/contracts/draft", json={"job_description": BAKERY_JOB, "budget": 150})
+    response = client.post(
+        "/contracts/draft",
+        json={"job_description": BAKERY_JOB, "budget": 150},
+        headers=auth_headers(client, "client"),
+    )
     assert response.status_code == 503
 
 
 def test_draft_endpoint_returns_contract(client: TestClient) -> None:
     client.app.state.llm = FakeLLM(draft())
 
-    response = client.post("/contracts/draft", json={"job_description": BAKERY_JOB, "budget": 150})
+    response = client.post(
+        "/contracts/draft",
+        json={"job_description": BAKERY_JOB, "budget": 150},
+        headers=auth_headers(client, "client"),
+    )
 
     assert response.status_code == 200
     assert response.json()["milestones"][0]["criteria"][0]["id"] == "M1-C1"
@@ -262,6 +271,7 @@ def test_draft_endpoint_rejects_bad_mockup(client: TestClient) -> None:
     response = client.post(
         "/contracts/draft",
         json={"job_description": BAKERY_JOB, "budget": 150, "mockup_base64": "not base64!!"},
+        headers=auth_headers(client, "client"),
     )
 
     assert response.status_code == 422

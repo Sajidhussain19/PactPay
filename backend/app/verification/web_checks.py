@@ -11,6 +11,7 @@ LLM-assisted locator only *proposes* selectors, and Playwright must still find a
 on-page element for a check to pass.
 """
 
+import copy
 import logging
 import re
 import time
@@ -121,6 +122,13 @@ class WebChecker:
             headless=True, args=["--disable-dev-shm-usage"]
         )
         return self
+
+    def scoped(self, artifacts_dir: Path) -> "WebChecker":
+        """Same browser, different artifacts dir (one per verification run)."""
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        clone = copy.copy(self)
+        clone._artifacts_dir = artifacts_dir
+        return clone
 
     async def __aexit__(self, *exc: object) -> None:
         if self._browser:

@@ -35,8 +35,11 @@ async def save_verification_report(
     run.finished_at = utcnow()
     run.duration_ms = report.duration_ms
     for c in report.criteria:
-        run.results.append(
+        # Insert rows directly: appending to run.results would lazy-load the collection,
+        # which async SQLAlchemy can't do implicitly.
+        session.add(
             CheckResultRecord(
+                run_id=run.id,
                 criterion_code=c.criterion_id,
                 check_type=c.check_type,
                 verdict=c.verdict.value,

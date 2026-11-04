@@ -124,6 +124,51 @@ class MilestoneService:
             ) from exc
         return milestone
 
+    async def record(
+        self,
+        milestone: MilestoneRecord,
+        *,
+        actor: str,
+        event: str,
+        updates: dict[str, Any],
+        details: dict[str, Any] | None = None,
+    ) -> MilestoneRecord:
+        """Save PayPal references (e.g. a capture id) without changing state. Audited."""
+        if unknown := set(updates) - UPDATABLE_FIELDS:
+            raise ValueError(f"Fields not updatable: {sorted(unknown)}")
+        milestone_id = milestone.id
+        for field, value in updates.items():
+            setattr(milestone, field, value)
+        self._session.add(
+            AuditEvent(
+                contract_id=milestone.contract_id,
+                milestone_id=milestone_id,
+                actor=actor,
+                action=event,
+                from_state=milestone.state.value,
+                to_state=milestone.state.value,
+                details={**(details or {}), **_jsonable(updates)},
+            )
+        )
+        try:
+            await self._session.commit()
+        except StaleDataError as exc:
+            await self._session.rollback()
+            raise ConcurrentUpdateError(
+                f"Milestone {milestone_id} was updated concurrently"
+            ) from exc
+        return milestone
+
+    async def find_by(self, **refs: str) -> MilestoneRecord | None:
+        """Look up a milestone by a PayPal reference, e.g. paypal_capture_id="..."."""
+        ((field, value),) = refs.items()
+        if field not in UPDATABLE_FIELDS:
+            raise ValueError(f"Can't look up by {field}")
+        milestone_id = await self._session.scalar(
+            select(MilestoneRecord.id).where(getattr(MilestoneRecord, field) == value)
+        )
+        return await self.get(milestone_id) if milestone_id else None
+
 
 def _facts_from_updates(updates: dict[str, Any]) -> dict[str, Any]:
     """Translate pending record updates into the MilestoneFacts fields they affect."""

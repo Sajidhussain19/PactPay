@@ -1,5 +1,6 @@
 import os
 import ssl
+import tempfile
 import threading
 from collections.abc import AsyncIterator, Iterator
 from functools import partial
@@ -15,6 +16,10 @@ from fastapi.testclient import TestClient
 
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["ARTIFACTS_DIR"] = tempfile.mkdtemp(prefix="pactpay-test-artifacts-")
+os.environ["AUTO_APPROVE_CHECK_SECONDS"] = "0"  # no background scheduler in tests
+os.environ["DEMO_MODE"] = "true"
+os.environ["DEMO_FREELANCER_PAYPAL_EMAIL"] = "freelancer-sandbox@personal.example.com"
 # Environment variables beat backend/.env, so tests never use real keys or spend credits.
 for _secret in ("PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID", "OPENAI_API_KEY"):
     os.environ[_secret] = ""
@@ -27,12 +32,25 @@ from tests.paypal_mocks import BASE_URL, no_sleep, token_response  # noqa: E402
 _SSL_CONTEXT = ssl.create_default_context()
 
 
+def auth_headers(client: TestClient, role: str) -> dict[str, str]:
+    token = client.post("/auth/demo-login", json={"role": role}).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """App with its own SQLite *file*. In-memory SQLite shares one connection across
+    sessions, which breaks when background tasks and requests overlap."""
+    from app.core.config import get_settings
     from app.main import create_app
 
-    with TestClient(create_app()) as test_client:  # `with` runs the lifespan
-        yield test_client
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{(tmp_path / 'test.db').as_posix()}")
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as test_client:  # `with` runs the lifespan
+            yield test_client
+    finally:
+        get_settings.cache_clear()
 
 
 @pytest.fixture
