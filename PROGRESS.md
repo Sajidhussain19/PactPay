@@ -133,3 +133,23 @@
 - Judge confidence never fell below 0.8 -> 0% routed to human; calibration is a known gap.
 - Gotcha: laptop Modern Standby froze a profiling run for 2.8h; keep it plugged in for runs.
 - Next: M10 frontend.
+
+## 2026-11-10: M10 Frontend + M11 Deploy & submission docs
+- Backend: `/demo/reset` + startup seeding (bakery contract AGREED, café contract DRAFT), demo
+  sites hosted at `/demo-sites/*`, SSE accepts `?token=`, Render `postgres://` URLs normalized.
+- Frontend (Next.js 15, shadcn/ui on Base UI, AG Grid Community): landing with one-click demo
+  logins + reset, dashboard (money KPIs + AG Grid), AI contract drafting/editing, contract
+  approval, milestone page (PayPal / sandbox-card funding, demo-site submit, live SSE timeline,
+  evidence report with screenshots, fix list, security banner, approve/review/dispute/cancel/retry).
+- Verified: `frontend/e2e/demo_flow.py` clicks the whole demo in a real browser against live
+  servers + real PayPal sandbox + gpt-4o (fail -> fix -> pass -> paid; sneaky site caught);
+  screenshots in docs/screenshots. 544 backend tests pass; frontend lint + build clean.
+- Deploy: Dockerfile (root context, Chromium, libatomic1, alembic on start), render.yaml
+  Blueprint, CI frontend job. Production container smoke-tested on Postgres: migrations, SSRF
+  422 on metadata URL, real verification + screenshots.
+- Docs: README for judges, docs/demo-video-script.md, docs/devpost.md, docs/deploy.md.
+- Gotchas: shadcn now uses Base UI (no asChild -> buttonVariants on Link); Next font variable
+  must be on <html>; slim Python image needs libatomic1 for Playwright's driver; stopping a
+  background task can leave `next start` holding the port. One unexplained 120s hang on a
+  sandbox-card fund call in Docker Desktop right after a dropped PayPal connection; not reproduced.
+- Next: push to GitHub, Render Blueprint, record video, submit on Devpost.

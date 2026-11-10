@@ -15,10 +15,14 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     env_file: ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://pactpay:pactpay@db:5432/pactpay
+      DATABASE_AUTO_CREATE: "false"
+      BACKEND_URL: http://localhost:8000
     ports:
       - "8000:8000"
     depends_on:

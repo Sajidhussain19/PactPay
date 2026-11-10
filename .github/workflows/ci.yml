@@ -26,6 +26,22 @@ jobs:
       - name: Test
         run: pytest -q
 
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
   evals:
     # Verifier trust gate: fail the build if defective or manipulated deliveries would be
     # auto-paid more than 5% of the time. Rules judge: free, deterministic, no API key.

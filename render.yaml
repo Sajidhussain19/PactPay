@@ -1,0 +1,65 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> pick this repo.
+# Secrets marked `sync: false` are entered in the Render dashboard (never committed).
+# If a service name is taken, Render gives a different URL: update BACKEND_URL,
+# FRONTEND_URL, CORS_ORIGINS and NEXT_PUBLIC_API_URL to match.
+
+databases:
+  - name: pactpay-db
+    plan: free
+    databaseName: pactpay
+    user: pactpay
+
+services:
+  - type: web
+    name: pactpay-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: starter # headless Chromium needs more than the free tier's 512 MB
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pactpay-db
+          property: connectionString
+      - key: DATABASE_AUTO_CREATE
+        value: "false" # migrations run on start (alembic upgrade head)
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PAYPAL_MODE
+        value: sandbox
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false # create the webhook after the first deploy, then set this
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: gpt-4o
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_FREELANCER_PAYPAL_EMAIL
+        sync: false # a US sandbox personal account
+      - key: BACKEND_URL
+        value: https://pactpay-api.onrender.com
+      - key: FRONTEND_URL
+        value: https://pactpay-web.onrender.com
+      - key: CORS_ORIGINS
+        value: '["https://pactpay-web.onrender.com"]'
+      - key: AUTO_APPROVE_HOURS
+        value: "48"
+
+  - type: web
+    name: pactpay-web
+    runtime: node
+    rootDir: frontend
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://pactpay-api.onrender.com
