@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -25,13 +25,15 @@ async def current_user(
     session: SessionDep,
     settings: SettingsDep,
     authorization: Annotated[str | None, Header()] = None,
+    token: Annotated[str | None, Query(include_in_schema=False)] = None,
 ) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
+    # Browsers' EventSource (SSE) can't send headers, so the stream passes ?token=.
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.removeprefix("Bearer ")
+    if not token:
         raise HTTPException(status_code=401, detail="Log in first")
     try:
-        user_id = verify_token(
-            authorization.removeprefix("Bearer "), settings.secret_key.get_secret_value()
-        )
+        user_id = verify_token(token, settings.secret_key.get_secret_value())
     except InvalidTokenError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     user = await session.get(User, user_id)

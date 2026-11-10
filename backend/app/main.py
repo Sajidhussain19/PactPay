@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.agents.judge import Judge, LLMJudge, RuleJudge
 from app.api.auth import router as auth_router
 from app.api.contracts import router as contracts_router
+from app.api.demo import router as demo_router
 from app.api.health import router as health_router
 from app.api.milestones import router as milestones_router
 from app.api.webhooks import router as webhooks_router
@@ -29,7 +30,7 @@ from app.paypal.webhooks import WebhookProcessor, WebhookVerifier
 from app.security.scanner import SubmissionScanner
 from app.security.url_guard import URLGuard
 from app.services.contracts import PermissionDeniedError
-from app.services.demo import ensure_demo_users
+from app.services.demo import ensure_demo_users, seed_if_empty
 from app.services.milestones import ConcurrentUpdateError, NotFoundError
 from app.services.payments import PaymentError, PaymentRuntime
 from app.services.records import SqlEventStore
@@ -118,6 +119,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.demo_mode:
         async with session_factory() as session:
             await ensure_demo_users(session, settings)
+            if settings.demo_seed:
+                await seed_if_empty(session, settings)
 
     paypal = PayPalClient.from_settings(settings)
     app.state.paypal = paypal
@@ -221,9 +224,18 @@ def create_app() -> FastAPI:
     app.include_router(contracts_router)
     app.include_router(milestones_router)
     app.include_router(webhooks_router)
+    app.include_router(demo_router)
 
     settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/artifacts", StaticFiles(directory=settings.artifacts_dir), name="artifacts")
+    if settings.demo_mode and settings.demo_dir.is_dir():
+        # Demo deliverables (good/buggy/malicious/sneaky) hosted here so judges can submit
+        # public URLs without deploying anything themselves.
+        app.mount(
+            "/demo-sites",
+            StaticFiles(directory=settings.demo_dir, html=True),
+            name="demo-sites",
+        )
     return app
 
 

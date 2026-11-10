@@ -9,8 +9,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 DEV_SECRET_KEY = "dev-only-insecure-secret-change-me"  # refused in production
 
@@ -63,6 +65,8 @@ class Settings(BaseSettings):
     # Demo mode: seeded client/freelancer logins for judges
     demo_mode: bool = True
     demo_freelancer_paypal_email: str = ""
+    demo_dir: Path = REPO_ROOT / "demo"  # demo sites, mockup and seeded contract
+    demo_seed: bool = True  # seed the bakery contract on startup if the DB is empty
 
     # Verification
     # Allow submitted URLs on localhost/private networks. Local demo only; refused in production.
@@ -71,6 +75,15 @@ class Settings(BaseSettings):
     check_timeout_seconds: float = 20.0
     repo_max_size_mb: int = 50
     repo_clone_timeout_seconds: float = 60.0
+
+    @field_validator("database_url")
+    @classmethod
+    def _async_driver(cls, url: str) -> str:
+        # Render/Heroku-style URLs (postgres://, postgresql://) -> async driver.
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+asyncpg://" + url.removeprefix(prefix)
+        return url
 
     @property
     def paypal_base_url(self) -> str:
