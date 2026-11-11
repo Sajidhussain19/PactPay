@@ -153,3 +153,10 @@
   background task can leave `next start` holding the port. One unexplained 120s hang on a
   sandbox-card fund call in Docker Desktop right after a dropped PayPal connection; not reproduced.
 - Next: push to GitHub, Render Blueprint, record video, submit on Devpost.
+
+## 2026-11-11: Deployed
+- Live (Render free plan, ₹0): web https://pactpay-web.onrender.com, API https://pactpay-api.onrender.com.
+- Verified: health in production mode; full judge checklist passed on the live site (fund ->
+  buggy fails -> fixed passes -> $142.50 paid; sneaky site flagged). CI green on GitHub.
+- PayPal sandbox webhook created; its ID goes in PAYPAL_WEBHOOK_ID on Render.
+- Remaining: record the demo video, submit on Devpost.
