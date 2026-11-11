@@ -22,6 +22,8 @@ creates a new one: someone has to decide whether the work is done.
 
 **Live demo:** https://pactpay-web.onrender.com (PayPal **sandbox**: no real money moves)
 
+**Demo video (under 3 min):** https://youtu.be/Bj82U5wE0Y0
+
 1. Click **Reset demo**, then **Continue as the client**. Open *Rosie's Bakery landing page*.
 2. Click **Instant demo funding**: $150 is now *held by PayPal, not taken* (a real sandbox authorization).
 3. **Switch to Freelancer**, pick **Buggy site**, submit. Watch the live verification: the contact

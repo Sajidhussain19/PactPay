@@ -2,6 +2,8 @@
 
 **Name:** PactPay
 
+**Links:** live demo https://pactpay-web.onrender.com · code https://github.com/Sajidhussain19/PactPay · video https://youtu.be/Bj82U5wE0Y0
+
 **Tagline (max 200 chars):** AI-verified escrow for freelance work: PayPal holds the payment, an AI
 checks the delivered site against the contract with evidence, and the money is released when it passes.
 
