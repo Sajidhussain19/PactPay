@@ -1,6 +1,7 @@
 # Deploying PactPay to Render
 
 About 20 minutes, most of it waiting for builds. You need a GitHub account and a Render account.
+**Cost: ₹0.** Everything runs on Render's free plan (no card needed for free services).
 
 ## 1. Push the repo to GitHub (public)
 
@@ -22,18 +23,25 @@ Your `.env` files are git-ignored, so no keys are pushed. Check with `git ls-fil
 ## 2. Create the Render Blueprint
 
 1. Render dashboard -> **New** -> **Blueprint** -> connect GitHub -> pick `pactpay`.
-2. Render reads `render.yaml` and proposes: `pactpay-db` (Postgres), `pactpay-api` (Docker),
-   `pactpay-web` (Node).
+2. Render reads `render.yaml` and proposes two free services: `pactpay-api` (Docker) and
+   `pactpay-web` (Node). There's no separate database: the demo uses SQLite inside the API container.
 3. It asks for the secret values (`sync: false`). Paste the same values as in `backend/.env`:
    - `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`: the **US** sandbox app (PactPay-US)
    - `OPENAI_API_KEY`
    - `DEMO_FREELANCER_PAYPAL_EMAIL`: `sb-rrdxu53641447@personal.example.com`
    - `PAYPAL_WEBHOOK_ID`: leave empty for now (step 4)
-4. Click **Apply**. The API image takes ~8 minutes to build the first time (it installs Chromium).
+4. Click **Apply**. The API image takes ~8-10 minutes to build the first time (it installs Chromium).
 
-**Plan note:** `pactpay-api` is set to the **Starter** plan because headless Chromium needs more
-than the free tier's 512 MB of memory. On the free plan verification is likely to crash. The
-database and the frontend can stay free.
+**How it fits the free plan (512 MB):** the API runs in low-memory mode (`LOW_MEMORY_BROWSER`, one
+check and one verification at a time). Tested in a container capped at 512 MB with no swap: the
+full demo (buggy site, fixed site, real PayPal capture and payout) peaked at about 280 MB.
+
+**Free-plan behaviour to know:**
+- The API sleeps after ~15 minutes without traffic; the first request then takes about a minute
+  to wake it. Open the site a minute before recording or before judges look.
+- Waking up restarts the container, which resets the demo data (SQLite) and re-seeds the bakery
+  contract automatically. That's intended: every judge starts from a clean demo.
+- Verifications run one at a time, so if two people verify at once, the second waits its turn.
 
 ## 3. Check the URLs
 

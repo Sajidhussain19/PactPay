@@ -60,6 +60,7 @@ class BrowserHolder:
                     timeout_seconds=self._settings.check_timeout_seconds,
                     locator=LLMSelectorSuggester(self._llm) if self._llm else None,
                     url_guard=self._guard,
+                    low_memory=self._settings.low_memory_browser,
                 ).__aenter__()
         web = self._web.scoped(artifacts)
         return RunTools(
@@ -142,7 +143,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.url_guard = guard
     browser = BrowserHolder(settings, llm, guard)
     app.state.verifier = VerificationManager(
-        session_factory, settings, check_factory=browser.check_factory, judge=judge
+        session_factory,
+        settings,
+        check_factory=browser.check_factory,
+        judge=judge,
+        max_concurrent_runs=settings.verification_concurrent_runs,
     )
     if recovered := await app.state.verifier.recover():
         logger.warning("Recovered %s interrupted verification run(s)", recovered)

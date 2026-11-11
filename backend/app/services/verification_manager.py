@@ -105,6 +105,7 @@ class VerificationManager:
         self._settings = settings
         self._check_factory = check_factory
         self._judge = judge
+        self._parallel_checks = settings.verification_parallel_checks
         self._slots = asyncio.Semaphore(max_concurrent_runs)
         self._channels: dict[str, EventChannel] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -172,6 +173,7 @@ class VerificationManager:
                     tools.run_check,
                     self._judge,
                     confidence_threshold=self._settings.judge_confidence_threshold,
+                    max_parallel_checks=self._parallel_checks,
                     on_event=lambda e: channel.publish(_public_event(e, self._settings)),
                     security_scan=tools.security_scan,
                 )

@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     allow_private_urls: bool = False
     artifacts_dir: Path = Path("artifacts")
     check_timeout_seconds: float = 20.0
+    # Concurrency. Render's free tier (512 MB) needs 1 / 1 and low_memory_browser=true.
+    verification_parallel_checks: int = 3
+    verification_concurrent_runs: int = 2
+    low_memory_browser: bool = False
     repo_max_size_mb: int = 50
     repo_clone_timeout_seconds: float = 60.0
 

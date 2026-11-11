@@ -51,6 +51,15 @@ SUCCESS_PATTERN = re.compile(
     re.I,
 )
 SETTLE_MS = 750
+# Chromium flags that keep a headless browser small enough for a 512 MB container.
+LOW_MEMORY_ARGS = [
+    "--disable-gpu",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--renderer-process-limit=2",
+    "--js-flags=--max-old-space-size=128",
+]
 MAX_REDIRECTS = 5
 MAX_LOG_LINES = 20
 
@@ -117,11 +126,13 @@ class WebChecker:
         timeout_seconds: float = 20.0,
         locator: SelectorSuggester | None = None,
         url_guard: URLGuard | None = None,
+        low_memory: bool = False,
     ) -> None:
         self._artifacts_dir = artifacts_dir
         self._timeout_ms = timeout_seconds * 1000
         self._locator = locator
         self._guard = url_guard
+        self._low_memory = low_memory
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
 
@@ -129,7 +140,8 @@ class WebChecker:
         self._artifacts_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
-            headless=True, args=["--disable-dev-shm-usage"]
+            headless=True,
+            args=["--disable-dev-shm-usage", *(LOW_MEMORY_ARGS if self._low_memory else [])],
         )
         return self
 

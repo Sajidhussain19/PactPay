@@ -24,7 +24,7 @@ COPY backend/alembic.ini ./alembic.ini
 COPY demo ./demo
 
 # Run as non-root; it only needs to write evidence screenshots.
-RUN useradd --create-home pactpay && mkdir -p /app/artifacts && chown -R pactpay /app/artifacts
+RUN useradd --create-home pactpay && mkdir -p /app/artifacts /app/data && chown -R pactpay /app/artifacts /app/data
 USER pactpay
 
 EXPOSE 8000
